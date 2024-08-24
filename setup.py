@@ -28,7 +28,7 @@ setup(
         ]
     },
     install_requires=[
-        "github3.py==2.3.0"
+        "github3.py==4.0.1"
     ],
     license="Apache License 2.0",
     name="ghrr",
