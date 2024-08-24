@@ -9,22 +9,14 @@ from github3.exceptions import ForbiddenError
 from tqdm import tqdm
 
 
-RATE_LIMIT_BACKOFF= 10
+RATE_LIMIT_BACKOFF = 10
 gh_user = os.getenv('GITHUB_USER')
 gh_token = os.getenv('GITHUB_TOKEN')
-
-parser = argparse.ArgumentParser(description='stargazers crawler')
-parser.add_argument('-o', '--organization', action='store',
-                    help='github organization', required=True)
-parser.add_argument('-r', '--repository', action='store',
-                    help='github repository', required=True)
-parser.add_argument('-f', '--file', action='store',
-                    help='output file path', required=False)
-
 warn = lambda msg: print(f'\033[93mError: {msg}\033[0m', file=sys.stderr)
 die = lambda msg: warn(msg) or exit(1)
 
 User = namedtuple('User', ['email', 'location','username','company','followers','repos','organizations'])
+
 
 def get_user_data(gh, u):
     username = u.login
@@ -40,13 +32,12 @@ def get_user_data(gh, u):
         organizations.append(org.login)
     return User(gh_user.email, gh_user.location, username, company, followers, repos, organizations)
 
-def validate_params(args):
+
+def validate_params():
     if not gh_user:
         die("Please add GITHUB_USER environment variable")
     if not gh_token:
         die("Please add GITHUB_TOKEN environment variable")
-    if not args.repository and not args.organization:
-        die("No argument given. Try ` --help` for further information")
 
 
 class DummyUpdater(object):
@@ -104,14 +95,12 @@ def iterate_users(gh, users_iterator, users_count, user_writer,user_interaction,
                     sleep(RATE_LIMIT_BACKOFF)
 
 
-if __name__ == '__main__':
-    args = parser.parse_args()
-    validate_params(args)
-    repository = args.repository
-    org = args.organization
+def retrieve_repo_data(org, repository, output_file = None):
+    validate_params()
     gh = login(gh_user, token=gh_token)
     repo_succeeded = False
     output = None
+    output_file = output_file
     progress = True
     while not repo_succeeded:
         try:
@@ -121,16 +110,16 @@ if __name__ == '__main__':
             contributors = gh_repository.contributors()
             subscribers = gh_repository.subscribers()
             subscribers_count = gh_repository.subscribers_count
-            if not args.file:
+            if not output_file:
                 today = date.today()
                 formated_today = today.strftime("%Y-%m-%d")  # YY-MM-DD
-                file_name = 'ghusers_{}_{}_{}.csv'.format(org, repository, formated_today)
-                output = open(file_name, mode='w')
-            elif args.file == '-':
+                output_file = 'ghusers_{}_{}_{}.csv'.format(org, repository, formated_today)
+                output = open(output_file, mode='w')
+            elif output_file == '-':
                 output = sys.stdout
                 progress = False
             else:
-                output = open(args.file, mode='w')
+                output = open(output_file, mode='w')
             repo_succeeded = True
         except ForbiddenError as e:
             wait_rate_limit(e)
@@ -145,3 +134,25 @@ if __name__ == '__main__':
         iterate_users(gh, stargazers, stargazers_count, user_writer,"stargazer", progress=progress)
         iterate_users (gh, subscribers, subscribers_count, user_writer,"subscriber", progress=progress)
         iterate_users (gh, contributors, -1, user_writer,"contributor", progress=progress)
+
+    return output_file
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='stargazers crawler')
+    parser.add_argument('-o', '--organization', action='store',
+                        help='github organization', required=True)
+    parser.add_argument('-r', '--repository', action='store',
+                        help='github repository', required=True)
+    parser.add_argument('-f', '--file', action='store',
+                        help='output file path', required=False)
+
+    args = parser.parse_args()
+
+    if not args.repository and not args.organization:
+        die("No argument given. Try ` --help` for further information")
+
+    repository = args.repository
+    org = args.organization
+    output_file = args.file
+    retrieve_repo_data(org, repository, output_file)
