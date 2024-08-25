@@ -1,0 +1,10 @@
+.env
+.venv
+.ipynb_checkpoints
+dist
+build
+__pycache__
+*.egg-info
+.idea
+outputs
+.vscode
