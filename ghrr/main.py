@@ -68,12 +68,16 @@ def wait_rate_limit(e: ForbiddenError):
     sleep(seconds_to_sleep)
 
 
-def iterate_users(gh, users_iterator, users_count, user_writer, user_interaction, progress=True):
+def iterate_users(gh, users_iterator, users_count, user_writer, user_interaction, processed_users, progress=True):
     total = users_count if users_count > 0 else None
     progress = tqdm(total=total, desc=f'Fetching {user_interaction} data',
                     unit='users') if progress else DummyProgress()
     with progress as progress_bar:
         for u in users_iterator:
+            if u.login in processed_users:
+                progress_bar.update(1)
+                continue
+
             data_received = False
             while not data_received:
                 try:
@@ -88,6 +92,7 @@ def iterate_users(gh, users_iterator, users_count, user_writer, user_interaction
                         user.repos,
                         user_interaction
                     ])
+                    processed_users.add(u.login)
                     data_received = True
                     progress_bar.update(1)
                 except ForbiddenError as e:
@@ -104,16 +109,45 @@ def retrieve_repo_data(repo_owner, repo_name, output_filepath=None):
     repo_succeeded = False
     progress = True
 
-    output_dir = "outputs"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    output = None
     stargazers = None
     stargazers_count = None
     contributors = None
     subscribers = None
     subscribers_count = None
+
+    output_dir = "outputs"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    processed_users = set()
+
+    if not output_filepath:
+        today = date.today()
+        formated_today = today.strftime("%Y-%m-%d")  # YY-MM-DD
+        output_filepath = os.path.join(output_dir, f'ghusers_{repo_owner}_{repo_name}_{formated_today}.csv')
+
+    if output_filepath == '-':
+        output = sys.stdout
+        progress = False
+    # Check if the output file already exists
+    elif os.path.exists(output_filepath):
+        # Read existing file to get the list of already processed users
+        with open(output_filepath, mode='r') as existing_file:
+            reader = csv.reader(existing_file)
+            next(reader)  # Skip header
+            for row in reader:
+                processed_users.add(row[0])  # Assuming username is the first column
+
+        # Open the file in append mode
+        output = open(output_filepath, mode='a')
+    else:
+        # Open the file in write mode if it doesn't exist
+        output = open(output_filepath, mode='w')
+        # Write header only if creating a new file
+        user_writer = csv.writer(output)
+        user_writer.writerow(
+            ["username", "company", "organizations", "email", "location", "followers_count", "public_repos_count",
+             "user_interaction"])
 
     while not repo_succeeded:
         try:
@@ -123,17 +157,6 @@ def retrieve_repo_data(repo_owner, repo_name, output_filepath=None):
             contributors = gh_repository.contributors()
             subscribers = gh_repository.subscribers()
             subscribers_count = gh_repository.subscribers_count
-
-            if not output_filepath:
-                today = date.today()
-                formated_today = today.strftime("%Y-%m-%d")  # YY-MM-DD
-                output_filepath = os.path.join(output_dir, f'ghusers_{repo_owner}_{repo_name}_{formated_today}.csv')
-                output = open(output_filepath, mode='w')
-            elif output_filepath == '-':
-                output = sys.stdout
-                progress = False
-            else:
-                output = open(output_filepath, mode='w')
 
             repo_succeeded = True
         except ForbiddenError as e:
@@ -145,12 +168,9 @@ def retrieve_repo_data(repo_owner, repo_name, output_filepath=None):
 
     with output as out:
         user_writer = csv.writer(out)
-        user_writer.writerow(
-            ["username", "company", "organizations", "email", "location", "followers_count", "public_repos_count",
-             "user_interaction"])
-        iterate_users(gh, stargazers, stargazers_count, user_writer, "stargazer", progress=progress)
-        iterate_users(gh, subscribers, subscribers_count, user_writer, "subscriber", progress=progress)
-        iterate_users(gh, contributors, -1, user_writer, "contributor", progress=progress)
+        iterate_users(gh, stargazers, stargazers_count, user_writer, "stargazer", processed_users, progress=progress)
+        iterate_users(gh, subscribers, subscribers_count, user_writer, "subscriber", processed_users, progress=progress)
+        iterate_users(gh, contributors, -1, user_writer, "contributor", processed_users, progress=progress)
 
     return output_filepath
 
