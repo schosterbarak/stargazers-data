@@ -21,15 +21,17 @@ mod = util.module_from_spec(spec)
 spec.loader.exec_module(mod)  # type: ignore
 version = mod.version  # type: ignore
 
+# Read the contents of the requirements.txt file
+with open(path.join(this_directory, "requirements.txt"), encoding="utf-8") as f:
+    requirements = f.read().splitlines()
+
 setup(
     extras_require={
         "dev": [
-            "github3.py==2.3.0"
+            "github3.py==4.0.1"
         ]
     },
-    install_requires=[
-        "github3.py==4.0.1"
-    ],
+    install_requires=requirements,
     license="Apache License 2.0",
     name="ghrr",
     version=version,
@@ -37,7 +39,12 @@ setup(
     author="schoster barak",
     author_email="schosterbarak@gmail.com",
     url="https://github.com/schosterbarak/ghrr",
-    packages=setuptools.find_packages(exclude=["tests*","integration_tests*"]),
+    packages=setuptools.find_packages(exclude=["tests*", "integration_tests*"]),
+    entry_points={
+      'console_scripts': [
+          'ghrr=ghrr.main'
+      ],
+    },
     long_description=long_description,
     long_description_content_type="text/markdown",
     classifiers=[
